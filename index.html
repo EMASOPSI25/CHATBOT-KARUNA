@@ -1,0 +1,238 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AI Chat</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(to bottom, #0d1b2a, #1b263b);
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+      position: relative;
+      color: white;
+    }
+
+    .stars {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+      pointer-events: none;
+      overflow: hidden;
+    }
+
+    .star {
+      position: absolute;
+      width: 2px;
+      height: 80px;
+      background: linear-gradient(-45deg, gold, rgba(255,215,0,0));
+      animation: fall linear infinite;
+      opacity: 0.8;
+    }
+
+    @keyframes fall {
+      from {
+        transform: translateY(-100px) translateX(0);
+        opacity: 1;
+      }
+      to {
+        transform: translateY(100vh) translateX(100px);
+        opacity: 0;
+      }
+    }
+
+    #chat {
+      flex: 1;
+      padding: 20px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .bubble {
+      max-width: 70%;
+      padding: 12px 16px;
+      border-radius: 16px;
+      font-size: 16px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+      transition: all 0.3s ease;
+    }
+
+    .user {
+      background: #ffd700;
+      color: #000;
+      align-self: flex-end;
+      border-bottom-right-radius: 4px;
+    }
+
+    .bot {
+      background: #ffffff;
+      color: #333;
+      align-self: flex-start;
+      border-bottom-left-radius: 4px;
+    }
+
+    #inputArea {
+      display: flex;
+      padding: 10px 20px;
+      border-top: 1px solid #444;
+      background-color: #1b263b;
+      position: relative;
+      z-index: 1;
+    }
+
+    #userInput {
+      flex: 1;
+      padding: 12px 14px;
+      font-size: 16px;
+      border: 1px solid #666;
+      border-radius: 20px;
+      resize: none;
+      outline: none;
+      background-color: #0d1b2a;
+      color: white;
+    }
+
+    #userInput:focus {
+      border-color: gold;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="stars"></div>
+  <div id="chat"></div>
+
+  <div id="inputArea">
+    <textarea id="userInput" rows="2" placeholder="Ketik pesan dan tekan Enter..."></textarea>
+  <button id="sendButton" title="Kirim Pesan" style="
+    margin-left: 10px;
+    padding: 0 16px;
+    background-color: gold;
+    color: black;
+    border: none;
+    border-radius: 20px;
+    cursor: pointer;
+    font-weight: bold;
+  ">Enter</button>
+  </div>
+
+  <script>
+    function createStar() {
+      const star = document.createElement("div");
+      star.classList.add("star");
+      star.style.left = Math.random() * window.innerWidth + "px";
+      star.style.animationDuration = 2 + Math.random() * 3 + "s";
+      document.querySelector(".stars").appendChild(star);
+      setTimeout(() => star.remove(), 4000);
+    }
+
+    setInterval(createStar, 200);
+
+    async function sendMessage() {
+      const input = document.getElementById("userInput");
+      const message = input.value.trim();
+      if (!message) return;
+      input.value = "";
+
+      const chat = document.getElementById("chat");
+      chat.innerHTML += `<div class="bubble user">${message}</div>`;
+      chat.scrollTop = chat.scrollHeight;
+
+      try {
+        const response = await fetch("/chat", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ message }),
+        });
+
+        const data = await response.json();
+        chat.innerHTML += `<div class="bubble bot">${data.reply}</div>`;
+        chat.scrollTop = chat.scrollHeight;
+
+        const utter = new SpeechSynthesisUtterance(data.reply);
+        speechSynthesis.speak(utter);
+      } catch (error) {
+        chat.innerHTML += `<div class="bubble bot">Maaf, server sedang sibuk. Coba lagi nanti.</div>`;
+      }
+    }
+
+    document.getElementById("userInput").addEventListener("keydown", function (event) {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        sendMessage();
+      }
+    });
+  
+  document.getElementById("sendButton").addEventListener("click", function () {
+    sendMessage();
+  });
+
+// Tambahkan tombol mic
+const micButton = document.createElement("button");
+micButton.innerHTML = "🎤";
+micButton.title = "Kirim dengan Suara";
+micButton.style.cssText = `
+  margin-left: 10px;
+  padding: 0 16px;
+  background-color: darkred;
+  color: white;
+  border: none;
+  border-radius: 20px;
+  cursor: pointer;
+  font-weight: bold;
+`;
+document.getElementById("inputArea").appendChild(micButton);
+
+// Fungsi rekam suara
+micButton.addEventListener("click", () => {
+  const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+  recognition.lang = "id-ID";
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+
+  micButton.disabled = true;
+  micButton.innerHTML = "🎙️...";
+
+  recognition.start();
+
+  recognition.onresult = (event) => {
+    const transcript = event.results[0][0].transcript;
+    document.getElementById("userInput").value = transcript;
+    sendMessage();
+  };
+
+  recognition.onerror = (event) => {
+    alert("Gagal mengenali suara: " + event.error);
+  };
+
+  recognition.onend = () => {
+    micButton.disabled = false;
+    micButton.innerHTML = "🎤";
+  };
+});
+
+
+
+</script>
+</body>
+</html>
